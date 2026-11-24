@@ -45,3 +45,16 @@ jobs:
           name: kaoyan-review-apk
           path: dist/*.apk
           if-no-files-found: error
+
+      - name: 首次生成的签名密钥留档
+        run: |
+          if [ -f .build-android/kaoyan.keystore ]; then
+            cp .build-android/kaoyan.keystore dist/kaoyan.keystore
+          fi
+
+      - name: 上传签名密钥（仅一次性密钥时存在）
+        uses: actions/upload-artifact@v4
+        with:
+          name: signing-key
+          path: dist/kaoyan.keystore
+          if-no-files-found: ignore
