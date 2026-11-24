@@ -50,11 +50,11 @@ echo "== 链接 =="
   -I "$PLATFORM_JAR" \
   --manifest "$ANDROID_DIR/AndroidManifest.xml" \
   -A "$ANDROID_DIR/assets" \
-  -R "$WORK/res-compiled/res.zip" \
   --min-sdk-version "$MIN_SDK" \
   --target-sdk-version "$TARGET_SDK" \
   --version-code "$VERSION_CODE" \
-  --version-name "$VERSION_NAME"
+  --version-name "$VERSION_NAME" \
+  "$WORK/res-compiled/res.zip"
 
 echo "== 编译 Java =="
 javac --release 11 -encoding UTF-8 -classpath "$PLATFORM_JAR" -d "$WORK/classes" $(find "$ANDROID_DIR/src" -name '*.java')
