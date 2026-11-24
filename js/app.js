@@ -1,12 +1,21 @@
 import * as S from "./scheduler.js";
 
 const LS_KEY = "kaoyan.v1";
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.1";
 const SUBJECTS = ["数学", "英语", "政治", "408", "专业课", "其他"];
 const RESULT_META = {
   mastered: { label: "完全掌握", hint: "按原计划继续" },
   shaky: { label: "有印象但不熟", hint: "今天补强，明天再测一次" },
   forgotten: { label: "基本遗忘", hint: "重新学，按短周期重排" },
+};
+
+const SUBJECT_COLORS = {
+  数学: "#c0532c",
+  英语: "#4b7a5b",
+  政治: "#7a6bb0",
+  408: "#3e7ca6",
+  专业课: "#b3823a",
+  其他: "#8f8672",
 };
 
 const viewEl = document.getElementById("view");
@@ -459,6 +468,168 @@ function viewItems() {
   );
 }
 
+/* ================= 视图：日历 ================= */
+function subjectColor(subject) {
+  return SUBJECT_COLORS[subject] || SUBJECT_COLORS["其他"];
+}
+
+function monthLabel(ym) {
+  const p = ym.split("-");
+  return p[0] + " 年 " + Number(p[1]) + " 月";
+}
+
+function shiftMonth(ym, delta) {
+  const p = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1 + delta, 1));
+  return d.getUTCFullYear() + "-" + String(d.getUTCMonth() + 1).padStart(2, "0");
+}
+
+function calendarDays(ym) {
+  const p = ym.split("-").map(Number);
+  const first = Date.UTC(p[0], p[1] - 1, 1);
+  const offset = (new Date(first).getUTCDay() + 6) % 7; // 周一为 0
+  const start = first - offset * 86400000;
+  const daysInMonth = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+  const rows = Math.ceil((offset + daysInMonth) / 7);
+  const out = [];
+  for (let i = 0; i < rows * 7; i++) {
+    const iso = S.toISO(start + i * 86400000);
+    out.push({ iso: iso, day: Number(iso.slice(8, 10)), inMonth: iso.slice(0, 7) === ym });
+  }
+  return out;
+}
+
+function calendarIndex() {
+  const map = new Map();
+  for (const item of activeItems()) {
+    for (const r of item.reviews) {
+      if (!map.has(r.date)) map.set(r.date, []);
+      map.get(r.date).push({ item: item, review: r });
+    }
+  }
+  return map;
+}
+
+function pickDayInMonth(ym, index) {
+  if (ym === today.slice(0, 7)) return today;
+  const days = calendarDays(ym).filter((d) => d.inMonth);
+  const hit = days.find((d) => (index.get(d.iso) || []).length);
+  return hit ? hit.iso : days[0].iso;
+}
+
+function calTaskCard(entry) {
+  const item = entry.item;
+  const r = entry.review;
+  const done = Boolean(r.doneAt);
+  const over = !done && r.date < today;
+  const meta = done
+    ? "<span>" + (RESULT_META[r.result] ? RESULT_META[r.result].label : "已完成") + "</span>"
+    : "<span>" + reviewLabel(item, r) + "</span>" + (over ? '<span class="flag">逾期</span>' : "");
+  const inner =
+    '<span class="task-mark" style="background:' + subjectColor(item.subject) + ";box-shadow:none" + '"></span>' +
+    '<span class="task-body"><span class="task-title">' + esc(item.title) + "</span>" +
+    '<span class="task-meta"><span class="chip">' + esc(item.subject || "未分科") + "</span>" + meta + "</span></span>";
+  if (done) return '<div class="task is-done">' + inner + "</div>";
+  return (
+    '<button class="task' + (over ? " is-overdue" : "") + (r.kind === "final" ? " is-final" : "") +
+    '" data-action="open-task" data-item="' + item.id + '" data-review="' + r.id + '" type="button">' +
+    inner + '<span class="task-go">打卡</span></button>'
+  );
+}
+
+function dayPanel(iso, index) {
+  const dl = deadline();
+  const exam = db.settings.exam;
+  const entries = (index.get(iso) || []).slice().sort((a, b) => {
+    return (a.review.doneAt ? 1 : 0) - (b.review.doneAt ? 1 : 0);
+  });
+  let note = "";
+  if (iso === exam) note = "考研初试 · 上岸";
+  else if (iso === dl) note = "考前总复习日 · 之后留白";
+  else if (iso > dl && iso < exam) note = "留白期 · 闭卷回忆 + 查漏";
+  const pending = entries.filter((e) => !e.review.doneAt);
+  const done = entries.filter((e) => e.review.doneAt);
+  let body;
+  if (!entries.length) body = '<p class="cal-empty">这一天没有安排复习</p>';
+  else {
+    body =
+      '<div class="task-list">' +
+      pending.map(calTaskCard).join("") +
+      done.map(calTaskCard).join("") +
+      "</div>";
+  }
+  return (
+    '<div class="cal-day"><div class="cal-day-head"><b>' + fmtMD(iso) + "</b><span>周" +
+    S.weekdayCN(iso) + "</span>" + (iso === today ? "<em>今天</em>" : "") + "</div>" +
+    (note ? '<p class="cal-note">' + note + "</p>" : "") +
+    body +
+    "</div>"
+  );
+}
+
+function viewCalendar() {
+  const index = calendarIndex();
+  const ym = ui.calMonth || today.slice(0, 7);
+  const sel =
+    ui.selectedDay && ui.selectedDay.slice(0, 7) === ym ? ui.selectedDay : pickDayInMonth(ym, index);
+  const dl = deadline();
+  const exam = db.settings.exam;
+  const days = calendarDays(ym);
+
+  let monthTotal = 0;
+  let monthDone = 0;
+  for (const d of days) {
+    if (!d.inMonth) continue;
+    for (const e of index.get(d.iso) || []) {
+      monthTotal += 1;
+      if (e.review.doneAt) monthDone += 1;
+    }
+  }
+
+  let cells = "";
+  for (const d of days) {
+    const entries = index.get(d.iso) || [];
+    const cls =
+      "cal-cell" +
+      (d.inMonth ? "" : " is-out") +
+      (d.iso === today ? " is-today" : "") +
+      (d.iso === sel ? " is-selected" : "") +
+      (d.iso === exam ? " is-exam" : "") +
+      (d.iso > dl && d.iso < exam ? " is-light" : "");
+    let bars = "";
+    for (const e of entries.slice(0, 3)) {
+      bars +=
+        '<i class="cal-bar' + (e.review.doneAt ? " is-done" : "") +
+        '" style="background:' + subjectColor(e.item.subject) + '"></i>';
+    }
+    if (entries.length > 3) bars += '<i class="cal-more">+' + (entries.length - 3) + "</i>";
+    cells +=
+      '<button class="' + cls + '" data-action="cal-pick" data-day="' + d.iso + '" type="button">' +
+      '<span class="cal-num">' + d.day + "</span>" +
+      '<span class="cal-bars">' + bars + "</span>" +
+      (d.iso === exam ? '<span class="cal-tag">考</span>' : "") +
+      "</button>";
+  }
+
+  return (
+    '<section class="cal">' +
+    '<div class="cal-head">' +
+    '<button class="cal-nav" data-action="cal-prev" type="button" aria-label="上个月">‹</button>' +
+    '<div class="cal-title">' + monthLabel(ym) + "</div>" +
+    (ym !== today.slice(0, 7)
+      ? '<button class="cal-today-btn" data-action="cal-today" type="button">回今天</button>'
+      : "") +
+    '<button class="cal-nav" data-action="cal-next" type="button" aria-label="下个月">›</button>' +
+    "</div>" +
+    '<div class="cal-stats"><span>本月 ' + monthTotal + " 次复习</span><span>已完成 " + monthDone +
+    "</span><span>截止 " + fmtMD(dl) + "</span></div>" +
+    '<div class="cal-week">' + ["一", "二", "三", "四", "五", "六", "日"].map((w) => "<span>" + w + "</span>").join("") + "</div>" +
+    '<div class="cal-grid">' + cells + "</div>" +
+    dayPanel(sel, index) +
+    "</section>"
+  );
+}
+
 /* ================= 视图：设置 ================= */
 function viewSettings() {
   const s = db.settings;
@@ -668,7 +839,7 @@ function refreshExamPill() {
 function render() {
   refreshExamPill();
   document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("is-active", b.dataset.view === ui.view));
-  const builders = { today: viewToday, plan: viewPlan, items: viewItems, settings: viewSettings };
+  const builders = { today: viewToday, calendar: viewCalendar, plan: viewPlan, items: viewItems, settings: viewSettings };
   viewEl.innerHTML = (builders[ui.view] || viewToday)();
   renderSheet();
   window.scrollTo({ top: 0 });
@@ -1046,6 +1217,26 @@ function onClick(e) {
       break;
     case "confirm-clear":
       clearAll();
+      break;
+    case "cal-prev":
+      ui.calMonth = shiftMonth(ui.calMonth || today.slice(0, 7), -1);
+      ui.selectedDay = null;
+      render();
+      break;
+    case "cal-next":
+      ui.calMonth = shiftMonth(ui.calMonth || today.slice(0, 7), 1);
+      ui.selectedDay = null;
+      render();
+      break;
+    case "cal-today":
+      ui.calMonth = today.slice(0, 7);
+      ui.selectedDay = today;
+      render();
+      break;
+    case "cal-pick":
+      ui.selectedDay = el.dataset.day;
+      ui.calMonth = String(el.dataset.day).slice(0, 7);
+      render();
       break;
     case "save-curve": {
       const input = document.getElementById("curveInput");

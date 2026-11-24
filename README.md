@@ -7,6 +7,7 @@
 
 ## 它做什么
 
+- 日历：月历网格，每天用科目色条显示复习数量，点某天看当天清单并直接打卡；考试日与留白期有标记。
 - 录入：一次性贴今天学的所有知识点（每行一条），标明「第一次学」还是「第 n 次复习」。
 - 排计划：按曲线生成后续每一次复习日期，并补一次「考前总复习」。
 - 倒推考试日：最后复习日 = 考试日 − 留白天数（可调 0–14 天，默认 3 天即 12 月 16 日）；之后的留白期只做轻量回顾。
@@ -40,7 +41,7 @@
 
 ## 下载 APK（安卓）
 
-直接装：https://github.com/z11254117-crypto/kaoyan-review/releases/latest/download/kaoyan-review-1.0.0.apk
+直接装（永远指向最新版）：https://github.com/z11254117-crypto/kaoyan-review/releases/latest/download/kaoyan-review.apk
 
 APK 版是原生安卓安装包：完全离线、不申请网络权限、数据存在 App 自己的 WebView 里。
 它与网页版（GitHub Pages）的数据互不相通，换端请在设置里导出 JSON 备份再导入。

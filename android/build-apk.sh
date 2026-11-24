@@ -7,8 +7,8 @@ ANDROID_DIR="$ROOT/android"
 WORK="$ROOT/.build-android"
 DIST="$ROOT/dist"
 APP_NAME="kaoyan-review"
-VERSION_NAME="1.0.0"
-VERSION_CODE="1"
+VERSION_NAME="1.0.1"
+VERSION_CODE="2"
 MIN_SDK="26"
 TARGET_SDK="34"
 KS_PASS="kaoyanreview"
@@ -77,6 +77,6 @@ keytool -genkeypair -keystore "$WORK/kaoyan.keystore" -storepass "$KS_PASS" -key
   -alias kaoyan -keyalg RSA -keysize 2048 -validity 10000 \
   -dname "CN=Kaoyan Review,O=Personal,C=CN" > /dev/null 2>&1
 "$BT_DIR/apksigner" sign --ks "$WORK/kaoyan.keystore" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
-  --out "$DIST/$APP_NAME-$VERSION_NAME.apk" "$WORK/aligned.apk"
-"$BT_DIR/apksigner" verify --print-certs "$DIST/$APP_NAME-$VERSION_NAME.apk"
+  --out "$DIST/$APP_NAME.apk" "$WORK/aligned.apk"
+"$BT_DIR/apksigner" verify --print-certs "$DIST/$APP_NAME.apk"
 ls -lh "$DIST"
