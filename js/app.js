@@ -357,13 +357,34 @@ function viewPlan() {
     const tasks = byDate.get(iso) || [];
     const isExam = iso === db.settings.exam;
     const isCut = iso === dl;
-    const isLight = iso > dl && !isExam;
+    const isLight = iso > dl && !isExam && !tasks.length;
     if (!tasks.length && !isExam && !isCut && !isLight) continue;
+
+    // 连续留白日合并成一行，别让计划页被 13 行「轻量回顾」占满
+    if (isLight) {
+      let j = i;
+      while (j + 1 < end) {
+        const next = S.addDays(today, j + 1);
+        if ((byDate.get(next) || []).length) break;
+        j += 1;
+      }
+      const startISO = iso;
+      const endISO = S.addDays(today, j);
+      rows.push(
+        '<div class="plan-day is-light">' +
+        '<div class="plan-date"><b>' + fmtShort(startISO) + (j > i ? "–" + fmtShort(endISO) : "") +
+        "</b>留白</div>" +
+        '<div class="plan-main"><div class="plan-label"><span class="light">轻量回顾：闭卷回忆 + 查漏</span></div>' +
+        '<span class="plan-empty">' + (j - i + 1) + " 天不安排新复习</span></div></div>"
+      );
+      i = j;
+      continue;
+    }
     count += tasks.length;
     let label = "";
     if (isExam) label = '<div class="plan-label"><span class="exam">考研初试</span></div>';
     else if (isCut) label = '<div class="plan-label"><span>考前总复习日 · 之后留白</span></div>';
-    else if (isLight) label = '<div class="plan-label"><span class="light">轻量回顾：闭卷回忆 + 查漏</span></div>';
+    if (isLight) label = '<div class="plan-label"><span class="light">留白期 · 顺带补一次</span></div>';
     let body;
     if (tasks.length) {
       body = '<div class="plan-tasks">' + tasks.map((t) =>
@@ -453,7 +474,7 @@ function viewSettings() {
     '<div class="stepper"><button data-action="buffer-step" data-step="-1" type="button">−</button>' +
     '<input id="bufferInput" class="num-input" type="number" min="0" max="14" value="' + s.bufferDays + '" />' +
     '<button data-action="buffer-step" data-step="1" type="button">+</button></div></div>' +
-    '<div class="row"><div><div class="row-label">复习曲线</div>' +
+    '<div class="row row-stack"><div><div class="row-label">复习曲线</div>' +
     '<div class="row-sub">' + curveDesc() + "</div></div>" +
     '<div class="seg">' +
     '<button data-action="set-profile" data-profile="exam" class="' + (s.profile === "exam" ? "is-active" : "") + '" type="button">压缩</button>' +
@@ -855,11 +876,14 @@ function replanAll(opts) {
     if (!pending.length) continue;
     const last = pending[pending.length - 1].date;
     const due = pending[0].date <= today;
-    if (!force && last <= dl && !due) continue;
+    const onlyFinal = pending.length === 1 && pending[0].kind === "final";
+    // 只剩「考前总复习」时，跟着留白天数一起挪到新的截止日
+    if (!force && !due && last <= dl && (!onlyFinal || last === dl)) continue;
     const offsets = S.remainingOffsets(profile, item.pos, { includeToday: due }).offsets;
     applyPlan(item, S.plan({ today, exam, bufferDays, profile, offsets }));
     n += 1;
   }
+  if (n) save(); // 重排后的日期必须落盘，否则刷新就回到旧计划
   return n;
 }
 

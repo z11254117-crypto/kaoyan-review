@@ -425,6 +425,10 @@ svg { display: block; }
 .row-label { font-size: 14px; }
 .row-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
 .row-value { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; font-variant-numeric: tabular-nums; }
+.row-stack { flex-direction: column; align-items: stretch; gap: 11px; }
+.row-stack .seg { align-self: stretch; }
+.seg button { flex: 1; white-space: nowrap; }
+.plan-day.is-light .plan-date b { font-size: 14px; color: var(--amber); }
 .row input[type="date"] {
   font: inherit;
   font-size: 13px;

@@ -1,5 +1,5 @@
 /* 复习曲线 · 离线缓存：一次装到手机，之后断网也能打卡 */
-const CACHE = "kaoyan-review-v4";
+const CACHE = "kaoyan-review-v6";
 const ASSETS = [
   "./",
   "./index.html",
