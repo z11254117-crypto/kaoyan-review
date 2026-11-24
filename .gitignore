@@ -1,0 +1,4 @@
+.shots/
+.ego/
+node_modules/
+*.log

@@ -1,0 +1,11 @@
+{
+  "name": "kaoyan-review",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "考研复习曲线 App（每天录入学习内容，自动排复习计划，考前自动压缩）",
+  "scripts": {
+    "test": "node --test test/",
+    "serve": "node serve.mjs"
+  }
+}
