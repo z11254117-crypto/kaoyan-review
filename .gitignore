@@ -1,4 +1,7 @@
 .shots/
 .ego/
 node_modules/
+dist/
+.build-android/
+android/assets/
 *.log

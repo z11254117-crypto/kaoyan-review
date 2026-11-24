@@ -1,0 +1,38 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "js/**"
+      - "css/**"
+      - "index.html"
+      - "icons/**"
+      - "tools/build-android-assets.mjs"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 单元测试
+        run: node --test test/scheduler.test.mjs
+
+      - name: 构建 APK
+        run: bash android/build-apk.sh
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaoyan-review-apk
+          path: dist/*.apk
+          if-no-files-found: error
