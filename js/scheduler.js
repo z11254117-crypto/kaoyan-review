@@ -29,6 +29,29 @@ export function getProfile(id) {
   return PROFILES[id] ?? PROFILES.exam;
 }
 
+/** 曲线节点清洗：只留正整数，去重并强制递增，最多保留 MAX_CURVE_POINTS 个 */
+export const MAX_CURVE_POINTS = 8;
+export function normalizeOffsets(list) {
+  const nums = (Array.isArray(list) ? list : [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .map((n) => Math.min(365, Math.round(n)));
+  const out = [];
+  for (const n of nums) {
+    if (!out.length || n > out[out.length - 1]) out.push(n);
+  }
+  return out.slice(0, MAX_CURVE_POINTS);
+}
+
+/** 接受预设 id（exam/standard）或自定义节点数组，统一得到节点列表 */
+export function resolveOffsets(profile) {
+  if (Array.isArray(profile)) {
+    const custom = normalizeOffsets(profile);
+    return custom.length ? custom : PROFILES.exam.offsets.slice();
+  }
+  return getProfile(profile).offsets.slice();
+}
+
 export function parseISO(iso) {
   const [y, m, d] = String(iso).split("-").map(Number);
   return Date.UTC(y, m - 1, d);
@@ -55,7 +78,7 @@ export function todayISO(now = new Date()) {
 }
 
 export function deadlineFor(exam, bufferDays = DEFAULT_BUFFER_DAYS) {
-  const b = Math.max(0, Math.min(7, Number(bufferDays) || 0));
+  const b = Math.max(0, Math.min(14, Number(bufferDays) || 0));
   return addDays(exam, -b);
 }
 
@@ -66,7 +89,7 @@ export function deadlineFor(exam, bufferDays = DEFAULT_BUFFER_DAYS) {
  *   includeToday=false → 今天这次已经做完（刚录入 / 刚打卡），偏移从下一级开始
  */
 export function remainingOffsets(profileId, completed = 0, { includeToday = false } = {}) {
-  const L = getProfile(profileId).offsets;
+  const L = resolveOffsets(profileId);
   const M = L.length;
   const c = Math.max(0, Math.min(Number(completed) || 0, M));
   const gap = (k) => (k === 0 ? L[0] : L[k] - L[k - 1]);

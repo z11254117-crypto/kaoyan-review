@@ -83,6 +83,65 @@ const isOverdue = (item) => {
 const pendingAll = () => activeItems().flatMap((item) => pendingOf(item).map((review) => ({ item, review })));
 const deadline = () => S.deadlineFor(db.settings.exam, db.settings.bufferDays);
 
+/** 当前生效的曲线节点：预设，或用户自定义数组 */
+function currentOffsets() {
+  const s = db.settings;
+  if (s.profile === "custom") {
+    const custom = S.normalizeOffsets(s.customOffsets || []);
+    return custom.length >= 2 ? custom : S.PROFILES.exam.offsets.slice();
+  }
+  return S.getProfile(s.profile).offsets.slice();
+}
+
+function curveDesc() {
+  const s = db.settings;
+  if (s.profile === "custom") return "自定义节点：第 " + currentOffsets().join(" · ") + " 天";
+  return S.getProfile(s.profile).desc;
+}
+
+function parseCurveInput(text) {
+  const nums = String(text || "")
+    .split(/[^0-9]+/)
+    .filter((x) => x !== "")
+    .map(Number);
+  const offsets = S.normalizeOffsets(nums);
+  const errs = [];
+  if (nums.length < 2) errs.push("至少写 2 个节点");
+  if (nums.length > S.MAX_CURVE_POINTS) errs.push("最多 8 个节点");
+  if (nums.some((n) => n > 120)) errs.push("最远 120 天");
+  if (offsets.length !== nums.length) errs.push("节点要递增、不重复，且都大于 0");
+  return { nums, offsets, ok: errs.length === 0, errs };
+}
+
+function curvePreviewHTML(text) {
+  const parsed = parseCurveInput(text);
+  if (!parsed.ok) return '<span style="color:var(--danger)">' + parsed.errs[0] + "</span>";
+  const meta = S.planForItem({
+    today,
+    exam: db.settings.exam,
+    bufferDays: db.settings.bufferDays,
+    profile: parsed.offsets,
+    mode: "learn",
+  });
+  if (meta.windowClosed) return "现在录入已经没有复习窗口了（只剩轻量回顾）";
+  return "今天首次学习的话：" + meta.reviews
+    .map((r) => fmtMD(r.date) + (r.kind === "final" ? " 总复习" : ""))
+    .join(" · ");
+}
+
+function curveEditorHTML() {
+  const draft = ui.data.curveDraft != null ? ui.data.curveDraft : currentOffsets().join(",");
+  return (
+    '<div class="curve-editor">' +
+    '<div class="row-sub">首次学习后第几天复习：逗号分隔，2–8 个、递增，最远 120 天（例：1,2,4,7,14,21）</div>' +
+    '<div class="curve-input-row"><input id="curveInput" class="field-input" type="text" inputmode="numeric" value="' +
+    esc(String(draft)) + '" />' +
+    '<button class="btn btn-primary btn-sm" data-action="save-curve" type="button">保存并重排</button></div>' +
+    '<div class="row-sub" id="curvePreview">' + curvePreviewHTML(draft) + "</div>" +
+    "</div>"
+  );
+}
+
 function fmtMD(iso) {
   const p = String(iso).split("-").map(Number);
   return p[1] + "月" + p[2] + "日";
@@ -390,17 +449,21 @@ function viewSettings() {
     '<div class="row-sub">所有复习都倒推到这天之前完成</div></div>' +
     '<input type="date" id="examDate" value="' + s.exam + '" /></div>' +
     '<div class="row"><div><div class="row-label">考前留白</div>' +
-    '<div class="row-sub">最后复习日 = 考试日 − ' + s.bufferDays + " 天</div></div>" +
+    '<div class="row-sub">最后复习日 = 考试日 − ' + s.bufferDays + " 天（0–14）</div></div>" +
     '<div class="stepper"><button data-action="buffer-step" data-step="-1" type="button">−</button>' +
-    "<span>" + s.bufferDays + "</span>" +
+    '<input id="bufferInput" class="num-input" type="number" min="0" max="14" value="' + s.bufferDays + '" />' +
     '<button data-action="buffer-step" data-step="1" type="button">+</button></div></div>' +
     '<div class="row"><div><div class="row-label">复习曲线</div>' +
-    '<div class="row-sub">' + S.getProfile(s.profile).desc + "</div></div>" +
+    '<div class="row-sub">' + curveDesc() + "</div></div>" +
     '<div class="seg">' +
     '<button data-action="set-profile" data-profile="exam" class="' + (s.profile === "exam" ? "is-active" : "") + '" type="button">压缩</button>' +
     '<button data-action="set-profile" data-profile="standard" class="' + (s.profile === "standard" ? "is-active" : "") + '" type="button">常规</button>' +
+    '<button data-action="set-profile" data-profile="custom" class="' + (s.profile === "custom" ? "is-active" : "") + '" type="button">自定义</button>' +
     "</div></div>" +
+    (s.profile === "custom" ? curveEditorHTML() : "") +
     "</div>" +
+    '<p class="settings-note" style="padding:10px 6px 0">动态调整：新录入的知识点按曲线往后排，一旦超过最后复习日就自动压缩间隔（一天最多一次），' +
+    "放不下就砍掉靠后的次数。打卡结果、逾期顺延、改考试日 / 留白 / 曲线都会触发重排。</p>" +
     '<div class="section-label">装到手机桌面</div>' +
     '<div class="card" style="padding:14px 16px"><p class="mini" style="line-height:1.8">' +
     "用手机浏览器打开这个页面 → 浏览器菜单（⋮ 或分享按钮）→「添加到主屏幕 / 安装应用」。<br/>" +
@@ -641,7 +704,8 @@ function closeSheet() {
 }
 
 function addItems(lines, subject, mode, reviewNo) {
-  const { exam, bufferDays, profile } = db.settings;
+  const { exam, bufferDays } = db.settings;
+  const profile = currentOffsets();
   for (const title of lines) {
     const meta = S.planForItem({ today, exam, bufferDays, profile, mode, reviewNo });
     db.items.unshift({
@@ -699,7 +763,8 @@ function completeReview(itemId, reviewId, result) {
   }
   review.doneAt = today;
   review.result = result;
-  const { exam, bufferDays, profile } = db.settings;
+  const { exam, bufferDays } = db.settings;
+  const profile = currentOffsets();
 
   if (result === "forgotten") {
     item.pos = 0;
@@ -734,7 +799,8 @@ function replanOne(itemId) {
     toast("这条已经没有待复习了");
     return;
   }
-  const { exam, bufferDays, profile } = db.settings;
+  const { exam, bufferDays } = db.settings;
+  const profile = currentOffsets();
   const includeToday = pending[0].date <= today;
   const offsets = S.remainingOffsets(profile, item.pos, { includeToday }).offsets;
   applyPlan(item, S.plan({ today, exam, bufferDays, profile, offsets }));
@@ -745,7 +811,8 @@ function replanOne(itemId) {
 }
 
 function catchUpAll() {
-  const { exam, bufferDays, profile } = db.settings;
+  const { exam, bufferDays } = db.settings;
+  const profile = currentOffsets();
   let n = 0;
   for (const item of activeItems()) {
     const pending = pendingOf(item);
@@ -779,7 +846,8 @@ function deleteItem(itemId) {
 
 function replanAll(opts) {
   const force = Boolean(opts && opts.force);
-  const { exam, bufferDays, profile } = db.settings;
+  const { exam, bufferDays } = db.settings;
+  const profile = currentOffsets();
   const dl = S.deadlineFor(exam, bufferDays);
   let n = 0;
   for (const item of activeItems()) {
@@ -796,7 +864,7 @@ function replanAll(opts) {
 }
 
 function setBuffer(v) {
-  const next = Math.max(0, Math.min(7, Number(v) || 0));
+  const next = Math.max(0, Math.min(14, Number(v) || 0));
   if (next === db.settings.bufferDays) return;
   db.settings.bufferDays = next;
   save();
@@ -806,12 +874,33 @@ function setBuffer(v) {
 }
 
 function setProfile(p) {
-  if (!S.PROFILES[p] || p === db.settings.profile) return;
+  if (["exam", "standard", "custom"].indexOf(p) < 0 || p === db.settings.profile) return;
+  if (p === "custom") {
+    const custom = S.normalizeOffsets(db.settings.customOffsets || []);
+    if (custom.length < 2) db.settings.customOffsets = S.PROFILES.exam.offsets.slice();
+  }
   db.settings.profile = p;
+  ui.data.curveDraft = null;
   save();
   const n = replanAll({ force: true });
   render();
-  toast("已切到" + S.getProfile(p).name + (n ? "，重排 " + n + " 条" : ""));
+  toast("曲线已切到" + curveDesc() + (n ? "，重排 " + n + " 条" : ""));
+}
+
+function saveCurve(text) {
+  const parsed = parseCurveInput(text);
+  if (!parsed.ok) {
+    toast(parsed.errs[0]);
+    return false;
+  }
+  db.settings.customOffsets = parsed.offsets;
+  db.settings.profile = "custom";
+  ui.data.curveDraft = null;
+  save();
+  const n = replanAll({ force: true });
+  render();
+  toast("曲线已保存：" + parsed.offsets.join(" · ") + " 天" + (n ? "，重排 " + n + " 条" : ""));
+  return true;
 }
 
 function setExam(iso) {
@@ -934,6 +1023,11 @@ function onClick(e) {
     case "confirm-clear":
       clearAll();
       break;
+    case "save-curve": {
+      const input = document.getElementById("curveInput");
+      saveCurve(input ? input.value : "");
+      break;
+    }
     case "finish-onboard":
       db.meta.onboarded = true;
       save();
@@ -945,12 +1039,22 @@ function onClick(e) {
 }
 
 function onInput(e) {
-  if (e.target && e.target.id === "addText") ui.data.text = e.target.value;
+  if (!e.target) return;
+  if (e.target.id === "addText") ui.data.text = e.target.value;
+  if (e.target.id === "curveInput") {
+    ui.data.curveDraft = e.target.value;
+    const pv = document.getElementById("curvePreview");
+    if (pv) pv.innerHTML = curvePreviewHTML(e.target.value);
+  }
 }
 
 function onChange(e) {
   const t = e.target;
   if (!t) return;
+  if (t.id === "bufferInput") {
+    setBuffer(t.value);
+    return;
+  }
   if (t.id === "examDate") {
     if (S.isISO(t.value)) setExam(t.value);
     return;

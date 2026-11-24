@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addDays, diffDays, deadlineFor, remainingOffsets, plan, planForItem, examWeek, daysLeft, todayISO,
+  normalizeOffsets,
 } from "../js/scheduler.js";
 
 const EXAM = "2026-12-19";
@@ -105,4 +106,38 @@ test("考前留白期：12/17、12/18 轻量回顾，12/19 考试", () => {
 
 test("今天默认值可用", () => {
   assert.match(todayISO(new Date(2026, 10, 24)), /^2026-11-24$/);
+});
+
+test("留白天数支持 0–14 天", () => {
+  assert.equal(deadlineFor(EXAM, 0), "2026-12-19");
+  assert.equal(deadlineFor(EXAM, 14), "2026-12-05");
+  assert.equal(deadlineFor(EXAM, 99), "2026-12-05");
+  assert.equal(deadlineFor(EXAM, -3), "2026-12-19");
+});
+
+test("自定义曲线：节点清洗（去重、递增、夹紧）", () => {
+  // 保持输入顺序，只丢掉不递增/非正数（排序交给 UI 校验提示，不静默改写）
+  assert.deepEqual(normalizeOffsets([3, 1, 2]), [3]);
+  assert.deepEqual(normalizeOffsets([2, 2, 5]), [2, 5]);
+  assert.deepEqual(normalizeOffsets([-1, 0, 4]), [4]);
+  assert.deepEqual(normalizeOffsets([1, 2, 3, 4, 5, 6, 7, 8, 9]), [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test("自定义曲线：任意节点直接排期", () => {
+  const m = planForItem({ today: "2026-11-24", exam: EXAM, bufferDays: 3, mode: "learn", profile: [2, 5, 9, 20] });
+  assert.deepEqual(m.reviews.map((r) => r.date), ["2026-11-26", "2026-11-29", "2026-12-03", "2026-12-14", "2026-12-16"]);
+  assert.equal(m.compressed, false);
+  assert.equal(m.reviews.at(-1).kind, "final");
+});
+
+test("自定义曲线：离考试近时同样自动压缩", () => {
+  const m = planForItem({ today: "2026-12-10", exam: EXAM, bufferDays: 3, mode: "learn", profile: [5, 10, 20, 40] });
+  assert.equal(m.compressed, true);
+  assert.deepEqual(m.reviews.map((r) => r.date), ["2026-12-11", "2026-12-12", "2026-12-13", "2026-12-16"]);
+});
+
+test("自定义留白不会越过考试日", () => {
+  const m = planForItem({ today: "2026-11-24", exam: EXAM, bufferDays: 14, mode: "learn", profile: [2, 5, 9, 20] });
+  assert.ok(m.reviews.every((r) => r.date <= "2026-12-05"));
+  assert.equal(m.reviews.at(-1).date, "2026-12-05");
 });
