@@ -4,4 +4,8 @@ node_modules/
 dist/
 .build-android/
 android/assets/
+android/keystore.p12
+*.p12
+*.keystore
+
 *.log

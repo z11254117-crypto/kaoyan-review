@@ -27,6 +27,15 @@ jobs:
       - name: 单元测试
         run: node --test test/scheduler.test.mjs
 
+      - name: 准备签名密钥
+        run: |
+          : > android/keystore.p12
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > android/keystore.p12
+          fi
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+
       - name: 构建 APK
         run: bash android/build-apk.sh
 

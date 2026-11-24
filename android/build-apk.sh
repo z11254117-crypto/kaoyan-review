@@ -73,10 +73,22 @@ PY
 
 echo "== 对齐 + 签名 =="
 "$BT_DIR/zipalign" -f 4 "$WORK/base.apk" "$WORK/aligned.apk"
-keytool -genkeypair -keystore "$WORK/kaoyan.keystore" -storepass "$KS_PASS" -keypass "$KS_PASS" \
-  -alias kaoyan -keyalg RSA -keysize 2048 -validity 10000 \
-  -dname "CN=Kaoyan Review,O=Personal,C=CN" > /dev/null 2>&1
-"$BT_DIR/apksigner" sign --ks "$WORK/kaoyan.keystore" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
+KS_FILE="$WORK/kaoyan.keystore"
+KS_TYPE="JKS"
+KS_ALIAS="kaoyan"
+if [ -s "$ANDROID_DIR/keystore.p12" ]; then
+  # 仓库 secret 里解出来的固定密钥：以后版本能覆盖安装
+  KS_FILE="$ANDROID_DIR/keystore.p12"
+  KS_TYPE="PKCS12"
+  echo "使用固定签名密钥"
+else
+  echo "警告：没有固定密钥，本次用一次性密钥（升级会签名不一致）"
+  keytool -genkeypair -keystore "$KS_FILE" -storepass "$KS_PASS" -keypass "$KS_PASS" \
+    -alias "$KS_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
+    -dname "CN=Kaoyan Review,O=Personal,C=CN" > /dev/null 2>&1
+fi
+"$BT_DIR/apksigner" sign --ks "$KS_FILE" --ks-type "$KS_TYPE" --ks-key-alias "$KS_ALIAS" \
+  --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
   --out "$DIST/$APP_NAME.apk" "$WORK/aligned.apk"
 "$BT_DIR/apksigner" verify --print-certs "$DIST/$APP_NAME.apk"
 ls -lh "$DIST"
