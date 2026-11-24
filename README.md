@@ -38,6 +38,16 @@
     node --test test/scheduler.test.mjs   # 13 条引擎用例
     node serve.mjs                        # http://localhost:8787/
 
+## 下载 APK（安卓）
+
+直接装：https://github.com/z11254117-crypto/kaoyan-review/releases/latest/download/kaoyan-review-1.0.0.apk
+
+APK 版是原生安卓安装包：完全离线、不申请网络权限、数据存在 App 自己的 WebView 里。
+它与网页版（GitHub Pages）的数据互不相通，换端请在设置里导出 JSON 备份再导入。
+
+重新打包：`bash android/build-apk.sh`（需要 JDK 17 + Android build-tools；CI 里由
+.github/workflows/android-apk.yml 自动出包，产物在 Actions 的 artifact 里）。
+
 ## 装到手机
 
 1. 手机与电脑连同一网络，浏览器打开 http://<电脑局域网 IP>:8787/ （或部署后的 HTTPS 地址）。
